@@ -1,6 +1,15 @@
-import { hash } from "bcryptjs";
+import { compareSync, hash } from "bcryptjs";
 import { IsEmail, Length } from "class-validator";
-import { Arg, Field, InputType, Mutation, Resolver } from "type-graphql";
+import { sign } from "jsonwebtoken";
+import { environment } from '../config/environment';
+import {
+  Arg,
+  Field,
+  InputType,
+  Mutation,
+  ObjectType,
+  Resolver,
+} from "type-graphql";
 import { User } from "../entity/user.entity";
 
 @InputType()
@@ -17,12 +26,29 @@ class UserInput {
   @Length(8, 254)
   password!: string;
 }
+@InputType()
+class LoginInput {
+  @Field()
+  @IsEmail()
+  email!: string;
+
+  @Field()
+  password!: string;
+}
+
+@ObjectType()
+class LoginResponse {
+  @Field()
+  userId!: number;
+
+  @Field()
+  jwt!: string;
+}
 
 @Resolver()
 export class AuthResolver {
   @Mutation(() => User)
-  async register(@Arg("input", () => UserInput) input: UserInput)
-   {
+  async register(@Arg("input", () => UserInput) input: UserInput) {
     const { fullName, email, password } = input;
 
     const userExists = await User.findOne({ where: { email } });
@@ -45,8 +71,40 @@ export class AuthResolver {
     const result = await User.findOneBy({ id: newUser.identifiers[0].id });
     console.log(result);
     console.log(newUser);
-    console.log( newUser.identifiers[0].id);
+    console.log(newUser.identifiers[0].id);
 
     return result;
+  }
+
+  @Mutation(() => LoginResponse)
+  async login(@Arg("input", () => LoginInput) input: LoginInput) {
+    const { email, password } = input;
+
+    const userFound = await User.findOne({ where: { email } });
+
+    if (!userFound) {
+      const error = new Error();
+      error.message = "Invalid credentials";
+      throw error;
+    }
+
+    const isValidPasswd: boolean = compareSync(password, userFound.password);
+
+    if (!isValidPasswd) {
+      const error = new Error();
+      error.message = "Invalid credentials";
+      throw error;
+    }
+
+    
+    const jwt: string = sign ({ id: userFound.id }, environment.JWT_SECRET);
+    console.log(jwt)
+   //console.log(isValidPasswd)
+    //console.log(userFound)
+    
+    return {
+      userId: userFound.id,
+      jwt: jwt,
+    };
   }
 }
