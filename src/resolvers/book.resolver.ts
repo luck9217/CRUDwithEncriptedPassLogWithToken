@@ -1,12 +1,22 @@
 import { Length } from "class-validator";
-import { Arg, Field, InputType, Mutation, Query, Resolver } from "type-graphql";
+import {
+  Arg,
+  Ctx,
+  Field,
+  InputType,
+  Mutation,
+  Query,
+  Resolver,
+  UseMiddleware,
+} from "type-graphql";
 import { Author } from "../entity/author.entity";
 import { Book } from "../entity/book.entity";
+import { isAuth, TContext } from "../middlewares/auth.middleware";
 
 @InputType()
 class BookInput {
   @Field()
-  @Length(3,12)
+  @Length(3, 64)
   title!: string;
 
   @Field()
@@ -22,7 +32,7 @@ class BookIdInput {
 @InputType()
 class BookUpdateInput {
   @Field(() => String, { nullable: true })
-  @Length(3,12)
+  @Length(3, 64)
   title?: string;
 
   @Field(() => Number, { nullable: true })
@@ -41,29 +51,39 @@ class BookUpdateParsedInput {
 @Resolver()
 export class BookResolver {
   @Mutation(() => Book)
-  async createBook(@Arg("input", () => BookInput) input: BookInput) {
-    const author = await Author.findOne({ where: [{ id: input.author }] });
+  @UseMiddleware(isAuth)
+  async createBook(
+    @Arg("input", () => BookInput) input: BookInput,
+    @Ctx() context: TContext
+  ) {
+    try {
+      console.log("result jwt",context.payload);
+      const author = await Author.findOne({ where: [{ id: input.author }] });
 
-    if (!author) {
-      const error = new Error();
-      error.message =
-        "The author for this book does not exist, please double check";
-      throw error;
-      ////throw new Error("author does not exist")
+      if (!author) {
+        const error = new Error();
+        error.message =
+          "The author for this book does not exist, please double check";
+        throw error;
+        ////throw new Error("author does not exist")
+      }
+
+      const book = await Book.insert({
+        title: input.title,
+        author: author,
+      });
+
+      const result = await Book.findOneBy({ id: book.identifiers[0].id });
+      console.log(result);
+
+      return result;
+    } catch (e: any) {
+      throw new Error(e.message);
     }
-
-    const book = await Book.insert({
-      title: input.title,
-      author: author,
-    });
-
-    const result = await Book.findOneBy({ id: book.identifiers[0].id });
-    console.log(result);
-
-    return result;
   }
 
   @Query(() => [Book])
+  @UseMiddleware(isAuth)
   async getAllBooks(): Promise<Book[] | undefined> {
     const result = await Book.find({ relations: ["author"] });
     console.log(result);

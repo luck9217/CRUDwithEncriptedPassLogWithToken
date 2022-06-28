@@ -11,6 +11,7 @@ import {
   Resolver,
 } from "type-graphql";
 import { User } from "../entity/user.entity";
+import { verify } from "jsonwebtoken";
 
 @InputType()
 class UserInput {
@@ -101,6 +102,10 @@ export class AuthResolver {
     console.log(jwt)
    //console.log(isValidPasswd)
     //console.log(userFound)
+
+    const payload = verify(jwt, environment.JWT_SECRET);
+    console.log(environment.JWT_SECRET)
+    console.log("result de verify",payload)
     
     return {
       userId: userFound.id,
